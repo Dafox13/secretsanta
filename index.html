@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Secret Santa</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎁%3C/text%3E%3C/svg%3E">
+<style>
+:root{--bg:#fbf6ef;--card:#fff;--ink:#2b2320;--muted:#7a6d65;--pri:#c0392b;--pri-ink:#fff;--line:#e8ddd0;--err:#b42318;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1614;--card:#2a211e;--ink:#f3ebe4;--muted:#b3a69c;--pri:#e0554a;--line:#40332e;--err:#ff8a80;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1c1614;--card:#2a211e;--ink:#f3ebe4;--muted:#b3a69c;--pri:#e0554a;--line:#40332e;--err:#ff8a80;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:520px;margin:0 auto;padding:20px 16px 48px}
+header{text-align:center;margin:12px 0 20px}
+h1{font-size:28px;margin:0 0 4px}h2{font-size:18px;margin:0 0 12px}
+.muted{color:var(--muted);margin:4px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+label{display:block;font-weight:600;font-size:14px;margin-bottom:12px}
+input,select,textarea{display:block;width:100%;margin-top:6px;padding:10px 12px;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px}
+button{font:inherit;font-weight:600;padding:10px 16px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;margin:4px 6px 0 0}
+button.pri{background:var(--pri);color:var(--pri-ink);border-color:var(--pri)}
+button.ghost{color:var(--muted)}
+.err{color:var(--err);min-height:1em}
+.big{font-size:32px;font-weight:700;text-align:center;margin:8px 0}
+.codes{list-style:none;padding:0;margin:0 0 8px}
+.codes li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+code{font-size:16px;letter-spacing:2px}
+#lang{position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);right:12px;font-size:13px;padding:4px 10px}
+</style>
+</head>
+<body>
+<button id="lang">PT</button>
+<main id="app"></main>
+<script>
+let L=(navigator.language||'').toLowerCase().startsWith('pt')?'pt':'en';
+const T={en:{name:'Secret Santa',groups:'Groups',newG:'New group',copyLink:'Copy link',copied:'Copied!',back:'← Back',link:'Open the link your organizer sent you.',remove:'Remove',setupH:'Set up the draw',evName:'Group name',evNote:'Budget, date, place (optional)',names:'Participants (one per line, at least 3)',excl:'Who shouldn’t get each other? (one pair per line, e.g. Ana, Rui)',drawBtn:'Draw names',min:'You need at least 3 names.',fail:'No valid draw found with those exclusions.',codesH:'Personal codes',warn:'Send each person their code privately now. After you continue, the codes are hidden and can’t be shown again.',copyAll:'Copy all',add:'Continue',jsonH:'Last step: update groups.json',jsonHow:'Copy this text and paste it over the whole content of groups.json on GitHub, then commit. The site updates in a minute or two.',copyJson:'Copy groups.json',who:'Who are you?',code:'Your code (4 digits)',reveal:'Reveal',gives:'You give a gift to',wrong:'Wrong code, try again.',hide:'Hide'},
+pt:{name:'Amigo Secreto',groups:'Grupos',newG:'Novo grupo',copyLink:'Copiar link',copied:'Copiado!',back:'← Voltar',link:'Abre o link que o organizador te enviou.',remove:'Remover',setupH:'Preparar o sorteio',evName:'Nome do grupo',evNote:'Orçamento, data, local (opcional)',names:'Participantes (um por linha, mínimo 3)',excl:'Quem não deve tirar quem? (um par por linha, ex.: Ana, Rui)',drawBtn:'Sortear',min:'Precisas de pelo menos 3 nomes.',fail:'Não encontrei um sorteio válido com essas exclusões.',codesH:'Códigos pessoais',warn:'Envia agora a cada pessoa o seu código em privado. Depois de continuares, os códigos ficam escondidos e não voltam a aparecer.',copyAll:'Copiar tudo',add:'Continuar',jsonH:'Último passo: atualizar o groups.json',jsonHow:'Copia este texto e cola-o por cima de todo o conteúdo do groups.json no GitHub, e faz commit. O site atualiza em um ou dois minutos.',copyJson:'Copiar groups.json',who:'Quem és tu?',code:'O teu código (4 dígitos)',reveal:'Descobrir',gives:'Vais oferecer um presente a',wrong:'Código errado, tenta outra vez.',hide:'Esconder'}};
+const t=k=>T[L][k];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const enc=new TextEncoder();
+const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a)));
+const ub=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const slug=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'group';
+let G=[],W=[],dirty=false,draft=null,adding=false,loaded=false;
+async function key(n,p,salt){const m=await crypto.subtle.importKey('raw',enc.encode(n.trim().toLowerCase()+'|'+p),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:ub(salt),iterations:150000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function seal(n,p,salt,txt){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},await key(n,p,salt),enc.encode(txt));return [b64(iv),b64(ct)]}
+const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=crypto.getRandomValues(new Uint32Array(1))[0]%(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+const head=(ti,no)=>`<header><h1>🎁 ${esc(ti||t('name'))}</h1>${no?`<p class="muted">${esc(no)}</p>`:''}</header>`;
+const url=id=>location.href.split('#')[0]+'#'+id;
+
+async function load(){
+  try{const r=await fetch('groups.json?'+Date.now());G=(await r.json()).groups||[]}catch(e){G=[]}
+  W=[...G];loaded=true;render();
+}
+function render(){
+  if(!loaded)return;
+  const id=location.hash.slice(1),g=G.find(x=>x.id===id);let h;
+  if(id==='admin')h=head()+admin();
+  else if(g)h=head(g.title,g.note)+revealCard(g);
+  else h=head()+`<p class="card">${t('link')}</p>`;
+  $('#app').innerHTML=h;wire(g);
+}
+function admin(){
+  if(draft)return `<section class="card"><h2>${t('codesH')}</h2><ul class="codes">${draft.names.map(n=>`<li><b>${esc(n)}</b><code>${draft.pins[n]}</code></li>`).join('')}</ul><button id="copy">${t('copyAll')}</button><p class="muted">${t('warn')}</p><button id="add" class="pri">${t('add')}</button></section>`;
+  if(adding)return `<section class="card"><h2>${t('setupH')}</h2><label>${t('evName')}<input id="ti" value="Secret Santa 2026"></label><label>${t('evNote')}<input id="no"></label><label>${t('names')}<textarea id="nm" rows="6"></textarea></label><label>${t('excl')}<textarea id="ex" rows="3"></textarea></label><button id="go" class="pri">${t('drawBtn')}</button><button id="cancel" class="ghost">${t('back')}</button><p id="msg" class="err"></p></section>`;
+  return (dirty?`<section class="card"><h2>${t('jsonH')}</h2><p class="muted">${t('jsonHow')}</p><textarea rows="6" readonly>${esc(JSON.stringify({groups:W}))}</textarea><button id="cj" class="pri">${t('copyJson')}</button></section>`:'')
+   +`<section class="card"><h2>${t('groups')}</h2>${W.length?`<ul class="codes">${W.map(x=>`<li><b>${esc(x.title||x.id)}</b><span><button data-l="${x.id}">${t('copyLink')}</button><button data-r="${x.id}" class="ghost">${t('remove')}</button></span></li>`).join('')}</ul>`:''}<button id="new" class="pri">${t('newG')}</button></section>`;
+}
+function revealCard(g){
+  return `<section class="card"><label>${t('who')}<select id="sel"><option value="">—</option>${g.names.map(n=>`<option>${esc(n)}</option>`).join('')}</select></label><label>${t('code')}<input id="pin" inputmode="numeric" maxlength="4" autocomplete="off"></label><button id="rev" class="pri">${t('reveal')}</button><div id="res" aria-live="polite"></div></section>`;
+}
+const copy=async(txt,btn)=>{try{await navigator.clipboard.writeText(txt);btn.textContent=t('copied')}catch(e){}};
+function wire(g){
+  const on=(s,f)=>{const e=$(s);if(e)e.onclick=f};
+  on('#new',()=>{adding=true;render()});
+  on('#cancel',()=>{adding=false;render()});
+  on('#go',doDraw);on('#add',addGroup);on('#rev',()=>doReveal(g));
+  on('#copy',e=>copy(draft.names.map(n=>n+': '+draft.pins[n]).join('\n'),e.target));
+  on('#cj',e=>copy(JSON.stringify({groups:W}),e.target));
+  document.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>copy(url(b.dataset.l),b));
+  document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{W=W.filter(x=>x.id!==b.dataset.r);dirty=true;render()});
+}
+function doDraw(){
+  const msg=$('#msg');
+  const names=[...new Set($('#nm').value.split('\n').map(s=>s.trim()).filter(Boolean))];
+  if(names.length<3){msg.textContent=t('min');return}
+  const bad=new Set();
+  $('#ex').value.split('\n').forEach(l=>{const g=l.split(/[,+&]/).map(s=>s.trim().toLowerCase()).filter(Boolean);g.forEach(a=>g.forEach(b=>bad.add(a+'|'+b)))});
+  let pairs=null;
+  for(let k=0;k<3000&&!pairs;k++){const s=shuffle(names);if(names.every((n,i)=>s[i]!==n&&!bad.has(n.toLowerCase()+'|'+s[i].toLowerCase()))){pairs={};names.forEach((n,i)=>pairs[n]=s[i])}}
+  if(!pairs){msg.textContent=t('fail');return}
+  const pins={};names.forEach(n=>pins[n]=String(1000+crypto.getRandomValues(new Uint32Array(1))[0]%9000));
+  const title=$('#ti').value.trim()||'Secret Santa';
+  let id=slug(title),k=2;while(W.some(x=>x.id===id)||id==='admin')id=slug(title)+'-'+k++;
+  draft={id,title,note:$('#no').value.trim(),names,pairs,pins};
+  render();
+}
+async function addGroup(){
+  const salt=b64(crypto.getRandomValues(new Uint8Array(16)));const blobs={};
+  for(const n of draft.names)blobs[n]=await seal(n,draft.pins[n],salt,draft.pairs[n]);
+  W=[...W,{id:draft.id,title:draft.title,note:draft.note,salt,names:draft.names,blobs}];
+  draft=null;adding=false;dirty=true;render();
+}
+async function doReveal(g){
+  const n=$('#sel').value,p=$('#pin').value.trim(),r=$('#res');
+  if(!n||!p)return;
+  try{
+    const [iv,ct]=g.blobs[n];
+    const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:ub(iv)},await key(n,p,g.salt),ub(ct));
+    r.innerHTML=`<p class="muted">${t('gives')}</p><p class="big">${esc(new TextDecoder().decode(pt))}</p><button id="hide" class="ghost">${t('hide')}</button>`;
+    $('#pin').value='';$('#hide').onclick=()=>{r.innerHTML=''};
+  }catch(e){r.innerHTML=`<p class="err">${t('wrong')}</p>`}
+}
+$('#lang').onclick=()=>{L=L==='en'?'pt':'en';$('#lang').textContent=L==='en'?'PT':'EN';render()};
+$('#lang').textContent=L==='en'?'PT':'EN';
+addEventListener('hashchange',render);
+load();
+</script>
+</body>
+</html>
